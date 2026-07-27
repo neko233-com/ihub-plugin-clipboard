@@ -1,0 +1,38 @@
+{
+  "$schema": "https://ihub.dev/schemas/plugin-manifest-v1.json",
+  "schemaVersion": 1,
+  "id": "ihub-plugin-clipboard",
+  "name": "Clipboard History",
+  "version": "1.0.0",
+  "description": "A consent-first, local text clipboard collection with pin, search, and reuse controls.",
+  "author": "iHub",
+  "license": "MIT",
+  "repository": "https://github.com/neko233-com/ihub-plugin-clipboard",
+  "engines": { "ihub": ">=0.1.0", "api": "^1.0.0" },
+  "entry": { "frontend": "dist/index.html" },
+  "activationEvents": ["onCommand:open-clipboard-history", "onSearch"],
+  "contributes": {
+    "commands": [
+      {
+        "id": "open-clipboard-history",
+        "title": "Open clipboard history",
+        "subtitle": "Capture, pin, search, and reuse locally saved text",
+        "keywords": ["clipboard", "clip", "paste", "history", "剪贴板", "历史"]
+      }
+    ],
+    "searchProviders": [
+      { "id": "clipboard-history", "title": "Clipboard history", "trigger": "clip ", "priority": 35 }
+    ],
+    "settings": [
+      {
+        "key": "items",
+        "title": "Local clipboard items",
+        "type": "textarea"
+      }
+    ]
+  },
+  "permissions": {
+    "clipboard": { "read": true, "write": true }
+  },
+  "update": { "channel": "stable", "autoUpdate": true }
+}

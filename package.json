@@ -1,0 +1,17 @@
+{
+  "name": "ihub-plugin-clipboard",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Consent-first local clipboard collection for iHub.",
+  "scripts": {
+    "dev": "vite --host 127.0.0.1",
+    "check": "tsc --noEmit -p tsconfig.json",
+    "build": "pnpm run check && vite build",
+    "preview": "vite preview"
+  },
+  "devDependencies": {
+    "typescript": "^7.0.2",
+    "vite": "^8.1.5"
+  }
+}
