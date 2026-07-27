@@ -54,6 +54,20 @@ export interface SearchResult {
   payload?: Json;
 }
 
+/** One text-only item from iHub's existing opt-in clipboard history. */
+export interface ClipboardHistoryItem {
+  id: string;
+  text: string;
+  capturedAt: string;
+  pinned: boolean;
+}
+
+/** A bounded, read-only snapshot. Calling it never enables host capture. */
+export interface ClipboardHistorySnapshot {
+  enabled: boolean;
+  items: ClipboardHistoryItem[];
+}
+
 interface HostRequest {
   pluginId: string;
   method: string;
@@ -91,6 +105,10 @@ export interface PluginContext {
   readonly clipboard: {
     readText(): Promise<string>;
     writeText(value: string): Promise<void>;
+    readonly history: {
+      /** Requires explicit `clipboard.history` in plugin.json. */
+      snapshot(): Promise<ClipboardHistorySnapshot>;
+    };
   };
   readonly events: {
     on<T = unknown>(name: string, listener: BridgeListener<T>): Promise<Disposable>;
@@ -247,6 +265,8 @@ export function createDevelopmentBridge(): DevelopmentBridge {
         case "clipboard.writeText":
           await browserCopy(String(params.value ?? ""));
           return undefined as T;
+        case "clipboard.history.snapshot":
+          return { enabled: false, items: [] } as T;
         default:
           return undefined as T;
       }
@@ -294,6 +314,9 @@ class Runtime implements Disposable {
       clipboard: {
         readText: () => this.call<string>("clipboard.readText"),
         writeText: (value) => this.call("clipboard.writeText", { value }),
+        history: {
+          snapshot: () => this.call<ClipboardHistorySnapshot>("clipboard.history.snapshot"),
+        },
       },
       events: { on: (name, listener) => this.listen(name, listener) },
       logger: {

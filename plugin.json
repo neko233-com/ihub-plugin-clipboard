@@ -3,7 +3,7 @@
   "schemaVersion": 1,
   "id": "ihub-plugin-clipboard",
   "name": "Clipboard History",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "A consent-first, local text clipboard collection with pin, search, and reuse controls.",
   "author": "iHub",
   "license": "MIT",
@@ -32,7 +32,7 @@
     ]
   },
   "permissions": {
-    "clipboard": { "read": true, "write": true }
+    "clipboard": { "read": true, "write": true, "history": true }
   },
   "update": { "channel": "stable", "autoUpdate": true }
 }

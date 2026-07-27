@@ -8,13 +8,19 @@
 - 只处理纯文本：不会读取图片、文件、HTML 或富文本附件。
 - 已收集条目保存在 iHub 的插件范围本机设置中，最多 36 条、每条最多 1,500 个字符；不上传网络。
 - 写回系统剪贴板只会在用户点击“复制”时调用 `clipboard.writeText`。
-- 唯一请求的敏感权限是 `clipboard.read` 与 `clipboard.write`；不请求文件系统、原生二进制、通知、shell 或网络权限。
+- 唯一请求的敏感权限是 `clipboard.read`、`clipboard.write` 与 `clipboard.history`；不请求文件系统、原生二进制、通知、shell 或网络权限。
 
-## 当前宿主集成
+## iHub 内置历史（只读快照）
 
-iHub 当前公开的前端 bridge 支持 `clipboard.readText` / `clipboard.writeText`，但尚未提供 `clipboard.history.*` 方法。因此本插件是“主动收集的本机文本集合”，不会读取内置工具的全局、后台采集剪贴板历史，也不会假装具备这项能力。
+`clipboard.history` 是独立于 `clipboard.read` 的明确清单权限；本插件的完整剪贴板权限是：
 
-当宿主未来提供经用户同意的、受限的 `clipboard.history.list` / `copy` / `pin` API 时，可在不增加后台监控的前提下，把它接到同一界面。
+```json
+{ "clipboard": { "read": true, "write": true, "history": true } }
+```
+
+用户点击“加载 iHub 历史”后，插件才调用 `clipboard.history.snapshot()`。宿主最多返回 36 条**已经在 iHub 内置工具中启用的**纯文本历史记录；调用不会启用历史记录、轮询/读取系统剪贴板，或将记录保存到插件设置、搜索索引或网络。
+
+这个区域只读：没有 iHub 全局历史的删除、固定或清空入口。每条记录仅可由用户主动点击“复制”写回系统剪贴板；这不会修改该历史条目的固定/删除状态。
 
 ## 开发与构建
 

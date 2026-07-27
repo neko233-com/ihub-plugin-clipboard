@@ -54,6 +54,7 @@ input:focus-visible {
 .intro,
 .capture-bar,
 .capture-copy,
+.hub-history-heading,
 .library-heading,
 .filter-row,
 .pinned-toggle,
@@ -186,6 +187,7 @@ code {
 }
 
 .primary-action,
+.secondary-action,
 .quiet-danger,
 .history-action {
   min-height: 31px;
@@ -210,7 +212,59 @@ code {
 }
 
 .primary-action:disabled,
+.secondary-action:disabled,
 .quiet-danger:disabled { cursor: default; opacity: .42; }
+
+.hub-history {
+  padding: 19px 0 18px;
+  border-bottom: 1px solid rgb(255 255 255 / 8%);
+}
+
+.hub-history-heading {
+  justify-content: space-between;
+  gap: 18px;
+}
+
+.hub-history-copy {
+  max-width: 78ch;
+  margin-top: 9px;
+  color: #949e9a;
+  font-size: .77rem;
+  line-height: 1.54;
+}
+
+.secondary-action {
+  flex: 0 0 auto;
+  border: 1px solid rgb(116 222 210 / 34%);
+  padding: 5px 10px;
+  color: #baf9f0;
+  background: rgb(61 143 134 / 13%);
+  box-shadow: inset 0 1px rgb(255 255 255 / 7%);
+}
+
+.secondary-action:hover:not(:disabled) {
+  border-color: rgb(148 238 226 / 60%);
+  color: #e7fffb;
+  background: rgb(93 198 185 / 20%);
+  transform: translateY(-1px);
+}
+
+.hub-history-summary {
+  min-height: 26px;
+  padding-top: 11px;
+  color: #7f8a86;
+  font-family: "Cascadia Code", Consolas, monospace;
+  font-size: .69rem;
+}
+
+.hub-history-list {
+  display: grid;
+  border-top: 1px solid rgb(255 255 255 / 8%);
+}
+
+.hub-history-row { box-shadow: inset 2px 0 rgb(121 222 209 / 24%); }
+.hub-history-row:hover { background: linear-gradient(90deg, rgb(123 215 204 / 5%), transparent 62%); }
+.hub-history-empty { min-height: 82px; }
 
 .library { padding: 20px 0 13px; }
 
@@ -403,7 +457,9 @@ code {
   .topbar { align-items: flex-start; }
   .environment-note { padding-top: 4px; font-size: .67rem; }
   .capture-bar { align-items: flex-start; flex-direction: column; }
-  .primary-action { width: 100%; }
+  .hub-history-heading { align-items: flex-start; flex-direction: column; }
+  .primary-action,
+  .secondary-action { width: 100%; }
   .history-row { grid-template-columns: 1fr; }
   .entry-text { grid-column: 1; }
   .history-actions { grid-column: 1; grid-row: auto; justify-content: flex-start; }

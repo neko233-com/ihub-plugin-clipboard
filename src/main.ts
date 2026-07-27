@@ -2,6 +2,7 @@ import {
   bootstrapPlugin,
   createDevelopmentBridge,
   hasIHubHost,
+  type ClipboardHistorySnapshot,
   type Disposable,
   type PluginContext,
   type SearchResult,
@@ -60,6 +61,19 @@ app.innerHTML = `
       <button id="capture-current" class="primary-action" type="button">收集当前内容</button>
     </section>
 
+    <section class="hub-history" aria-labelledby="hub-history-title">
+      <div class="hub-history-heading">
+        <div>
+          <p class="section-kicker">IHUB HISTORY · READ ONLY</p>
+          <h2 id="hub-history-title">iHub 内置历史</h2>
+        </div>
+        <button id="load-ihub-history" class="secondary-action" type="button">加载 iHub 历史</button>
+      </div>
+      <p class="hub-history-copy">仅在点击时读取已经启用的内置纯文本历史。不会开启记录、不会改变固定状态，也不会写入本插件的本机集合。</p>
+      <p id="hub-history-summary" class="hub-history-summary" aria-live="polite"></p>
+      <div id="hub-history-list" class="hub-history-list" aria-live="polite"></div>
+    </section>
+
     <section class="library" aria-labelledby="library-title">
       <div class="library-heading">
         <div>
@@ -99,18 +113,23 @@ function requiredElement<T extends HTMLElement>(id: string): T {
 
 const environmentNote = requiredElement<HTMLElement>("environment-note");
 const captureCurrentButton = requiredElement<HTMLButtonElement>("capture-current");
+const loadHubHistoryButton = requiredElement<HTMLButtonElement>("load-ihub-history");
 const clearUnpinnedButton = requiredElement<HTMLButtonElement>("clear-unpinned");
 const filterInput = requiredElement<HTMLInputElement>("history-filter");
 const pinnedOnlyInput = requiredElement<HTMLInputElement>("pinned-only");
 const collectionSummary = requiredElement<HTMLElement>("collection-summary");
 const historyList = requiredElement<HTMLElement>("history-list");
+const hubHistorySummary = requiredElement<HTMLElement>("hub-history-summary");
+const hubHistoryList = requiredElement<HTMLElement>("hub-history-list");
 const status = requiredElement<HTMLElement>("status");
 
 let context: PluginContext | null = null;
 let runtime: Disposable | null = null;
 let entries: ClipboardEntry[] = [];
+let hubHistory: ClipboardHistorySnapshot | null = null;
 let selectedEntryId: string | null = null;
 let captureInFlight = false;
+let hubHistoryLoading = false;
 
 function setStatus(message: string, tone: StatusTone = "ready"): void {
   status.textContent = message;
@@ -170,6 +189,43 @@ function normalizeEntries(raw: unknown): ClipboardEntry[] {
     }
   }
   return sortedEntries(restored);
+}
+
+/**
+ * Treat the host response as untrusted UI input even though the manifest
+ * permission is enforced by iHub. The result stays in memory only and is
+ * deliberately kept separate from the plugin-owned `entries` collection.
+ */
+function normalizeHubHistorySnapshot(raw: unknown): ClipboardHistorySnapshot {
+  if (!raw || typeof raw !== "object") {
+    return { enabled: false, items: [] };
+  }
+  const snapshot = raw as Record<string, unknown>;
+  const items = Array.isArray(snapshot.items) ? snapshot.items : [];
+  const normalized: ClipboardHistorySnapshot["items"] = [];
+  const ids = new Set<string>();
+  for (const candidate of items) {
+    if (!candidate || typeof candidate !== "object") {
+      continue;
+    }
+    const record = candidate as Record<string, unknown>;
+    const id = typeof record.id === "string" ? record.id.trim() : "";
+    const text = typeof record.text === "string" ? record.text : "";
+    if (!id || !text.trim() || ids.has(id)) {
+      continue;
+    }
+    ids.add(id);
+    normalized.push({
+      id,
+      text,
+      capturedAt: typeof record.capturedAt === "string" ? record.capturedAt : timestamp(),
+      pinned: record.pinned === true,
+    });
+    if (normalized.length >= MAX_ITEMS) {
+      break;
+    }
+  }
+  return { enabled: snapshot.enabled === true, items: normalized };
 }
 
 function serializedEntries(): string {
@@ -290,6 +346,64 @@ function renderEntries(): void {
   }
 }
 
+function renderHubHistory(): void {
+  hubHistoryList.replaceChildren();
+  if (!hubHistory) {
+    hubHistorySummary.textContent = isBrowserPreview
+      ? "浏览器预览不会伪造或加载 iHub 内置历史。"
+      : "尚未加载。点击“加载 iHub 历史”后才会请求只读快照。";
+    return;
+  }
+
+  hubHistorySummary.textContent = hubHistory.enabled
+    ? `iHub 内置历史已启用 · 本次只读加载 ${hubHistory.items.length} 条（最多 ${MAX_ITEMS} 条）`
+    : "iHub 内置历史当前未启用；本次没有开启记录或读取系统剪贴板。";
+
+  if (hubHistory.items.length === 0) {
+    const empty = document.createElement("div");
+    empty.className = "history-empty hub-history-empty";
+    const title = document.createElement("strong");
+    title.textContent = hubHistory.enabled ? "内置历史中暂时没有文本" : "内置历史尚未启用";
+    const copy = document.createElement("span");
+    copy.textContent = hubHistory.enabled
+      ? "它仍完全由 iHub 内置工具管理；此插件没有删除、固定或清空入口。"
+      : "请在 iHub 内置工具中自行启用；本插件不会替你开启它。";
+    empty.append(title, copy);
+    hubHistoryList.append(empty);
+    return;
+  }
+
+  for (const entry of hubHistory.items) {
+    const row = document.createElement("article");
+    row.className = "history-row hub-history-row";
+    row.dataset.entryId = entry.id;
+
+    const meta = document.createElement("div");
+    meta.className = "history-meta";
+    const state = document.createElement("span");
+    state.className = entry.pinned ? "entry-state is-pinned" : "entry-state";
+    state.textContent = entry.pinned ? "iHub 已固定 · 只读" : "iHub 历史 · 只读";
+    const time = document.createElement("time");
+    time.dateTime = entry.capturedAt;
+    time.textContent = displayTime(entry.capturedAt);
+    const size = document.createElement("span");
+    size.className = "entry-size";
+    size.textContent = `${textBytes(entry.text).toLocaleString()} B`;
+    meta.append(state, time, size);
+
+    const text = document.createElement("p");
+    text.className = "entry-text";
+    text.textContent = entry.text;
+    text.title = entry.text;
+
+    const actions = document.createElement("div");
+    actions.className = "history-actions";
+    actions.append(actionButton("复制", "copy-hub", "复制到系统剪贴板（不修改 iHub 历史）"));
+    row.append(meta, text, actions);
+    hubHistoryList.append(row);
+  }
+}
+
 async function updateEntries(next: ClipboardEntry[], successMessage: string): Promise<void> {
   const previous = entries;
   entries = sortedEntries(next);
@@ -338,6 +452,32 @@ async function captureCurrentClipboard(): Promise<void> {
   }
 }
 
+async function loadHubHistory(): Promise<void> {
+  if (!context || hubHistoryLoading) {
+    return;
+  }
+  if (isBrowserPreview) {
+    setStatus("iHub 内置历史只在 iHub 桌面端可用；浏览器预览不会伪造记录。", "error");
+    return;
+  }
+  hubHistoryLoading = true;
+  loadHubHistoryButton.disabled = true;
+  loadHubHistoryButton.textContent = "正在加载…";
+  try {
+    hubHistory = normalizeHubHistorySnapshot(await context.clipboard.history.snapshot());
+    renderHubHistory();
+    setStatus(hubHistory.enabled
+      ? `已读取 ${hubHistory.items.length} 条 iHub 内置历史；数据只保留在当前界面内存中。`
+      : "iHub 内置历史当前未启用；本插件没有开启记录或读取系统剪贴板。", "success");
+  } catch (error) {
+    setStatus(error instanceof Error ? error.message : "无法读取 iHub 内置历史。", "error");
+  } finally {
+    hubHistoryLoading = false;
+    loadHubHistoryButton.disabled = false;
+    loadHubHistoryButton.textContent = "加载 iHub 历史";
+  }
+}
+
 async function copyEntry(id: string): Promise<void> {
   const entry = entries.find((item) => item.id === id);
   if (!entry || !context) {
@@ -348,6 +488,19 @@ async function copyEntry(id: string): Promise<void> {
     selectedEntryId = id;
     renderEntries();
     setStatus("已复制到系统剪贴板。", "success");
+  } catch (error) {
+    setStatus(error instanceof Error ? error.message : "无法写入系统剪贴板。", "error");
+  }
+}
+
+async function copyHubHistoryEntry(id: string): Promise<void> {
+  const entry = hubHistory?.items.find((item) => item.id === id);
+  if (!entry || !context) {
+    return;
+  }
+  try {
+    await context.clipboard.writeText(entry.text);
+    setStatus("已复制到系统剪贴板；iHub 内置历史没有被修改。", "success");
   } catch (error) {
     setStatus(error instanceof Error ? error.message : "无法写入系统剪贴板。", "error");
   }
@@ -432,7 +585,17 @@ historyList.addEventListener("click", (event) => {
   }
 });
 
+hubHistoryList.addEventListener("click", (event) => {
+  const target = event.target instanceof HTMLElement ? event.target.closest<HTMLButtonElement>("button[data-action]") : null;
+  const row = target?.closest<HTMLElement>("[data-entry-id]");
+  const id = row?.dataset.entryId;
+  if (target?.dataset.action === "copy-hub" && id) {
+    void copyHubHistoryEntry(id);
+  }
+});
+
 captureCurrentButton.addEventListener("click", () => void captureCurrentClipboard());
+loadHubHistoryButton.addEventListener("click", () => void loadHubHistory());
 clearUnpinnedButton.addEventListener("click", () => void clearUnpinnedEntries());
 filterInput.addEventListener("input", renderEntries);
 pinnedOnlyInput.addEventListener("change", renderEntries);
@@ -503,9 +666,10 @@ void bootstrapPlugin(PLUGIN_ID, activate, {
 }).then((value) => {
   runtime = value;
   renderEntries();
+  renderHubHistory();
   setStatus(isBrowserPreview
     ? "浏览器预览不会后台读取剪贴板；点击收集按钮时会请求浏览器权限。"
-    : "准备就绪。点击收集后才会读取当前纯文本剪贴板。",
+    : "准备就绪。可手动收集当前文本，或点击“加载 iHub 历史”读取只读快照。",
   );
 }).catch((error) => {
   setStatus(error instanceof Error ? error.message : "插件无法启动。", "error");
@@ -518,3 +682,4 @@ window.addEventListener("pagehide", () => {
 });
 
 renderEntries();
+renderHubHistory();
